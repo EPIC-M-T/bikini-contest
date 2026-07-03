@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f2f6da"/>
+      <stop offset="0.55" stop-color="#d9e1ba"/>
+      <stop offset="1" stop-color="#a9bd86"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="8" dy="10" stdDeviation="5" flood-color="#06250e" flood-opacity=".45"/>
+    </filter>
+    <symbol id="bill" viewBox="0 0 210 94">
+      <rect x="4" y="4" width="202" height="86" rx="8" fill="url(#paper)" stroke="#355f35" stroke-width="5"/>
+      <rect x="24" y="18" width="162" height="58" rx="6" fill="none" stroke="#587b4a" stroke-width="3" opacity=".7"/>
+      <circle cx="105" cy="47" r="24" fill="#dce8c7" stroke="#486f42" stroke-width="3"/>
+      <text x="105" y="56" text-anchor="middle" font-family="Impact,Arial Black,sans-serif" font-size="33" fill="#285b2e">$</text>
+      <text x="22" y="34" font-family="Arial Black,sans-serif" font-size="19" fill="#24542a">100</text>
+      <text x="188" y="72" text-anchor="end" font-family="Arial Black,sans-serif" font-size="19" fill="#24542a">100</text>
+      <rect x="76" y="4" width="20" height="86" fill="#738d4c" opacity=".62"/>
+      <rect x="116" y="4" width="20" height="86" fill="#738d4c" opacity=".5"/>
+    </symbol>
+  </defs>
+  <rect width="900" height="900" fill="#213118"/>
+  <g filter="url(#shadow)">
+    <use href="#bill" x="-50" y="25" transform="rotate(-18 55 75)"/>
+    <use href="#bill" x="128" y="10" transform="rotate(10 232 58)"/>
+    <use href="#bill" x="330" y="35" transform="rotate(-7 435 82)"/>
+    <use href="#bill" x="560" y="15" transform="rotate(17 665 62)"/>
+    <use href="#bill" x="735" y="50" transform="rotate(-21 840 98)"/>
+    <use href="#bill" x="25" y="180" transform="rotate(15 130 227)"/>
+    <use href="#bill" x="235" y="155" transform="rotate(-20 340 202)"/>
+    <use href="#bill" x="430" y="180" transform="rotate(8 535 227)"/>
+    <use href="#bill" x="640" y="155" transform="rotate(-9 745 202)"/>
+    <use href="#bill" x="-20" y="330" transform="rotate(-11 85 377)"/>
+    <use href="#bill" x="185" y="315" transform="rotate(22 290 362)"/>
+    <use href="#bill" x="390" y="330" transform="rotate(-16 495 377)"/>
+    <use href="#bill" x="602" y="315" transform="rotate(12 707 362)"/>
+    <use href="#bill" x="72" y="475" transform="rotate(-24 177 522)"/>
+    <use href="#bill" x="300" y="485" transform="rotate(14 405 532)"/>
+    <use href="#bill" x="525" y="470" transform="rotate(-18 630 517)"/>
+    <use href="#bill" x="715" y="505" transform="rotate(20 820 552)"/>
+    <use href="#bill" x="-35" y="640" transform="rotate(18 70 687)"/>
+    <use href="#bill" x="190" y="625" transform="rotate(-12 295 672)"/>
+    <use href="#bill" x="415" y="650" transform="rotate(23 520 697)"/>
+    <use href="#bill" x="650" y="625" transform="rotate(-8 755 672)"/>
+    <use href="#bill" x="80" y="780" transform="rotate(-16 185 827)"/>
+    <use href="#bill" x="335" y="765" transform="rotate(11 440 812)"/>
+    <use href="#bill" x="585" y="795" transform="rotate(-19 690 842)"/>
+  </g>
+  <rect width="900" height="900" fill="url(#v)" opacity=".22"/>
+  <defs>
+    <radialGradient id="v" cx="50%" cy="50%" r="70%">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="1"/>
+    </radialGradient>
+  </defs>
+</svg>
