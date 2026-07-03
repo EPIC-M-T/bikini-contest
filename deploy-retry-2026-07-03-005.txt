@@ -1,0 +1,2 @@
+Latest site version marker: 2026-07-03 005.
+This commit is intended to trigger GitHub Pages publishing from main for the latest site files.
