@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 1228" preserveAspectRatio="xMidYMid slice">
+<defs>
+<linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#dcd0ff"/><stop offset=".25" stop-color="#ff4de0"/><stop offset=".5" stop-color="#ffd39a"/><stop offset=".73" stop-color="#1784d7"/><stop offset="1" stop-color="#05325f"/></linearGradient>
+<radialGradient id="p" cx="25%" cy="56%" r="60%"><stop offset="0" stop-color="#ff2bdd" stop-opacity=".75"/><stop offset="1" stop-color="#ff2bdd" stop-opacity="0"/></radialGradient>
+<radialGradient id="c" cx="88%" cy="62%" r="65%"><stop offset="0" stop-color="#20c9ff" stop-opacity=".7"/><stop offset="1" stop-color="#20c9ff" stop-opacity="0"/></radialGradient>
+<filter id="blur"><feGaussianBlur stdDeviation="14"/></filter>
+</defs>
+<rect width="2048" height="1228" fill="url(#g)"/><rect width="2048" height="1228" fill="url(#p)"/><rect width="2048" height="1228" fill="url(#c)"/>
+<g opacity=".38" filter="url(#blur)"><path d="M0 690C300 630 585 660 890 820" stroke="#ff65e5" stroke-width="90" fill="none"/><path d="M1230 500c310 20 580 150 820 380" stroke="#2bdcff" stroke-width="110" fill="none"/></g>
+<g stroke="#081326" stroke-width="12" stroke-linecap="round" opacity=".82" fill="none">
+<path d="M700 -40C910 210 1010 360 1160 680"/><path d="M874 26C730 100 620 180 488 310"/><path d="M930 92C800 220 680 340 572 520"/><path d="M1008 170C870 360 748 520 650 735"/><path d="M1084 260C970 460 870 640 780 875"/><path d="M1160 360C1090 560 1020 760 980 1000"/>
+<path d="M1530 -50C1425 155 1325 310 1190 520"/><path d="M1465 0C1610 70 1740 170 1905 345"/><path d="M1400 92C1550 230 1690 410 1830 650"/><path d="M1330 180C1470 370 1580 570 1700 860"/>
+<path d="M72 104C260 260 380 440 500 710"/><path d="M0 420C220 470 430 570 680 760"/><path d="M20 690C240 720 455 800 710 970"/>
+</g>
+<g stroke="#0b2340" stroke-width="7" stroke-linecap="round" opacity=".45" fill="none"><path d="M1720 0c-90 220-180 440-270 680"/><path d="M1780 0c60 180 140 350 260 540"/><path d="M2000 460c-200-40-380-30-565 55"/></g>
+<rect width="2048" height="1228" fill="rgba(0,0,0,.08)"/>
+</svg>
