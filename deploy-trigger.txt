@@ -1,0 +1,2 @@
+GitHub Pages redeploy trigger for OG page animation update.
+Commit a685a0f8e5a1a246f299c399e0ce5cc986603b99 contained the OG prize reveal and scroll animation changes.
