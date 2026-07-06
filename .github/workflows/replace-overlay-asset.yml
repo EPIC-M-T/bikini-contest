@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 jobs:
-  replace-overlay:
+  patch-pages:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -20,7 +20,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Update hero overlay static-logo timing and page logos
+      - name: Patch OG pages and hero assets
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -28,32 +28,18 @@ jobs:
           import re
 
           overlay_url = "https://assets.cdn.filesafe.space/YzjwmP6zpvDUp28hrM1o/media/6a4b12676f5641e105b994ee.webp"
-          logo_file = "bikini-final (1920 x 1920 px)(1).png"
           giphy_patterns = [
               re.compile(r"https://media\d*\.giphy\.com/media/[^\"'<>\s]+?\.gif"),
               re.compile(r"https://media\.giphy\.com/media/[^\"'<>\s]+?\.gif"),
           ]
-
-          def rel_logo(path: Path) -> str:
-              depth = len(path.parent.parts)
-              prefix = "../" * depth
-              return f"{prefix}assets/{logo_file}"
-
-          def hero_logo_markup(path: Path) -> str:
-              return f'<div class="hero-logo-mark" aria-label="EPIC Bikini Contest logo"><img src="{rel_logo(path)}" alt="EPIC Bikini Contest Palm Tree Beach Club Las Vegas Swim Week"></div>'
-
-          hero_open = re.compile(r'(<section\s+class=["\'][^"\']*\bhero\b[^"\']*["\'][^>]*>)', re.I)
-
           changed = []
           for path in Path('.').rglob('*.html'):
               if '.git' in path.parts:
                   continue
               text = path.read_text(encoding='utf-8')
               original = text
-
               for pattern in giphy_patterns:
                   text = pattern.sub(overlay_url, text)
-
               text = text.replace(
                   ".hero-logo-static{opacity:0;transition:opacity .7s ease}",
                   ".hero-logo-static{opacity:0;visibility:hidden;transition:opacity .45s ease .82s,visibility 0s linear .82s}"
@@ -63,38 +49,23 @@ jobs:
                   ".hero-logo-full.intro-complete .hero-logo-static{opacity:1;visibility:visible}"
               )
               text = text.replace(
-                  ".hero-logo-animated{position:absolute;inset:0;z-index:2;display:grid;place-items:center;opacity:1;visibility:visible;transition:opacity .75s ease,visibility .75s ease;pointer-events:none}",
-                  ".hero-logo-animated{position:absolute;inset:0;z-index:2;display:grid;place-items:center;opacity:1;visibility:visible;transition:opacity .75s ease,visibility 0s linear .75s;pointer-events:none}"
-              )
-              text = text.replace(
                   "@media(prefers-reduced-motion:reduce){.hero-logo-static{opacity:1}.hero-logo-animated{display:none}}",
                   "@media(prefers-reduced-motion:reduce){.hero-logo-static{opacity:1;visibility:visible;transition:none}.hero-logo-animated{display:none}}"
               )
-
-              is_home = path.name == 'index.html'
-              has_hero = 'class="hero"' in text or "class='hero'" in text or re.search(r'class=["\'][^"\']*\bhero\b', text)
-              has_logo = logo_file in text
-
-              if (not is_home) and has_hero and (not has_logo):
-                  text = hero_open.sub(lambda m: m.group(1) + hero_logo_markup(path), text, count=1)
-
-              if '.hero-logo-mark' not in text and ('hero-logo-mark' in text or logo_file in text):
-                  pass
-
-              if 'hero-logo-mark' in text and '.hero-logo-mark{' not in text:
-                  css = ".hero-logo-mark{width:min(520px,92vw);margin:0 auto clamp(1rem,3vw,1.7rem);display:grid;place-items:center}.hero-logo-mark img{width:100%;height:auto;filter:drop-shadow(0 24px 30px rgba(0,0,0,.62)) drop-shadow(0 0 22px rgba(255,57,200,.25))}@media(max-width:880px){.hero-logo-mark{width:min(360px,90vw);margin:.4rem auto 1rem}}"
-                  text = text.replace('</style>', css + '</style>', 1)
-
+              if path.as_posix() in {'og/index.html', 'og/apply.html'}:
+                  if 'model-cards.css' not in text:
+                      text = text.replace('</head>', '<link rel="stylesheet" href="model-cards.css"></head>')
+                  if 'model-cards.js' not in text:
+                      text = text.replace('</body>', '<script src="model-cards.js"></script></body>')
               if text != original:
                   path.write_text(text, encoding='utf-8')
                   changed.append(str(path))
-
           if changed:
               print('Updated files:')
               for file in changed:
-                  print(f' - {file}')
+                  print(' - ' + file)
           else:
-              print('No matching files needed updates.')
+              print('No changes needed.')
           PY
 
       - name: Commit and publish changes
@@ -104,10 +75,9 @@ jobs:
             echo "No changes to commit."
             exit 0
           fi
-
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .
-          git commit -m "Ensure latest hero logo on non-home pages"
+          git commit -m "Wire approved model cards into OG pages"
           git push origin HEAD:main
           git push origin HEAD:gh-pages --force
