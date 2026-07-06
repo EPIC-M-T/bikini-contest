@@ -28,7 +28,7 @@ function showToast(message) {
   if (!toast) return;
   toast.textContent = message;
   toast.classList.add('is-visible');
-  setTimeout(() => toast.classList.remove('is-visible'), 4200);
+  setTimeout(() => toast.classList.remove('is-visible'), 5200);
 }
 
 function splitPair(value) {
@@ -36,8 +36,40 @@ function splitPair(value) {
   return [parts[0] || '', parts.slice(1).join(' / ') || ''];
 }
 
-function fileNames(input) {
-  return [...(input?.files || [])].map(file => file.name).join(', ');
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function imageToDataURL(file, maxSide = 1600, quality = .78) {
+  if (!file || !file.type.startsWith('image/')) return readFileAsDataURL(file);
+  const dataUrl = await readFileAsDataURL(file);
+  return new Promise(resolve => {
+    const image = new Image();
+    image.onload = () => {
+      const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(image.width * scale));
+      canvas.height = Math.max(1, Math.round(image.height * scale));
+      canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    image.onerror = () => resolve(dataUrl);
+    image.src = dataUrl;
+  });
+}
+
+async function packFile(file) {
+  if (!file) return null;
+  return { name: file.name, type: file.type || 'application/octet-stream', dataUrl: await imageToDataURL(file) };
+}
+
+async function packFiles(input) {
+  return Promise.all([...(input?.files || [])].map(packFile));
 }
 
 photos?.addEventListener('change', () => {
@@ -55,35 +87,41 @@ form?.addEventListener('submit', async event => {
   const locationParts = splitPair(document.querySelector('#location')?.value || '');
   const shoeDressParts = splitPair(document.querySelector('#shoeDress')?.value || '');
   const hairEyesParts = splitPair(document.querySelector('#hairEyes')?.value || '');
-  const payload = new FormData();
-
-  payload.append('name', document.querySelector('#name')?.value || '');
-  payload.append('age', document.querySelector('#age')?.value || '');
-  payload.append('email', document.querySelector('#email')?.value || '');
-  payload.append('phone', document.querySelector('#phone')?.value || '');
-  payload.append('instagram', document.querySelector('#instagram')?.value || '');
-  payload.append('city', locationParts[0]);
-  payload.append('state', locationParts[1]);
-  payload.append('height', document.querySelector('#height')?.value || '');
-  payload.append('measurements', document.querySelector('#measurements')?.value || '');
-  payload.append('shoeSize', shoeDressParts[0]);
-  payload.append('dressSize', shoeDressParts[1]);
-  payload.append('naturalHairColor', hairEyesParts[0]);
-  payload.append('naturalEyeColor', hairEyesParts[1]);
-  payload.append('agency', document.querySelector('#agency')?.value || '');
-  payload.append('portfolio', document.querySelector('#portfolio')?.value || '');
-  payload.append('notes', document.querySelector('#notes')?.value || '');
-  payload.append('sourcePage', location.href);
-  payload.append('userAgent', navigator.userAgent);
-  payload.append('idUrl', fileNames(document.querySelector('#idUpload')));
-  payload.append('headshotUrl', fileNames(document.querySelector('#headshot')));
-  payload.append('additionalImageUrls', fileNames(document.querySelector('#photos')));
-  payload.append('compCardUrl', fileNames(document.querySelector('#compCardUpload')));
 
   try {
     submitButton.disabled = true;
+    submitButton.textContent = 'Uploading...';
+    showToast('Uploading images and sending your submission...');
+
+    const packedPhotos = await packFiles(document.querySelector('#photos'));
+    const payload = {
+      action: 'submitEntry',
+      name: document.querySelector('#name')?.value || '',
+      age: document.querySelector('#age')?.value || '',
+      email: document.querySelector('#email')?.value || '',
+      phone: document.querySelector('#phone')?.value || '',
+      instagram: document.querySelector('#instagram')?.value || '',
+      city: locationParts[0],
+      state: locationParts[1],
+      height: document.querySelector('#height')?.value || '',
+      measurements: document.querySelector('#measurements')?.value || '',
+      shoeSize: shoeDressParts[0],
+      dressSize: shoeDressParts[1],
+      naturalHairColor: hairEyesParts[0],
+      naturalEyeColor: hairEyesParts[1],
+      agency: document.querySelector('#agency')?.value || '',
+      portfolio: document.querySelector('#portfolio')?.value || '',
+      notes: document.querySelector('#notes')?.value || '',
+      sourcePage: location.href,
+      userAgent: navigator.userAgent,
+      idFile: await packFile(document.querySelector('#idUpload')?.files?.[0]),
+      headshotFile: await packFile(document.querySelector('#headshot')?.files?.[0]),
+      photoFiles: packedPhotos,
+      compCardFile: await packFile(document.querySelector('#compCardUpload')?.files?.[0])
+    };
+
     submitButton.textContent = 'Submitting...';
-    await fetch(SUBMISSION_URL, { method: 'POST', mode: 'no-cors', body: payload });
+    await fetch(SUBMISSION_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
     form.reset();
     if (selected) selected.textContent = '0 images selected.';
     showToast('Thank you! Your EPIC Bikini Contest submission has been sent for contestant review.');
