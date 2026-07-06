@@ -10,6 +10,10 @@ const prize = document.querySelector('.hero-prize');
 const cards = [...document.querySelectorAll('.asset-card')];
 const SUBMISSION_URL = 'https://script.google.com/macros/s/AKfycbxVwGX70-fL-QM1nfKqlSyNdrh0hq_CFwBsKvwYgZ_AEbJL6oLufGXzLLqP6zGEtlCN/exec';
 
+const modelCardBackFix = document.createElement('style');
+modelCardBackFix.textContent = `.model-card-back{justify-content:flex-start!important;padding:1.35rem 1rem .85rem!important;background:linear-gradient(145deg,#21102c 0%,#090d18 58%,#03050c 100%)!important}.model-card-back:after{display:none!important;content:none!important}.model-card-back>*{position:relative!important;z-index:3!important}.model-card-back .model-info-number{display:block!important;margin:0 0 .34rem!important;padding:0!important;line-height:1.18!important;font-size:.68rem!important;letter-spacing:.18em!important;white-space:nowrap!important}.model-card-back h3{margin:0 0 .48rem!important;font-size:1.42rem!important;line-height:.95!important}.model-mini-facts{gap:.16rem!important}.model-mini-fact{padding:.17rem 0!important;border-bottom:1px solid rgba(255,255,255,.12)!important}.model-mini-fact span{font-size:.5rem!important;line-height:1.05!important}.model-mini-fact b{font-size:.67rem!important;line-height:1.08!important}.model-card-back-cta{margin-top:.5rem!important;padding:.48rem .65rem!important}.model-card-back:before{opacity:1!important}.model-card-front:after{display:block!important}`;
+document.head.appendChild(modelCardBackFix);
+
 if (overlay && heroBadge) heroBadge.classList.add('has-intro');
 
 toggle?.addEventListener('click', () => {
