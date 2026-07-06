@@ -27,10 +27,22 @@ function output(data, e) {
 }
 
 function parsePayload(e) {
+  let data = {};
   if (e && e.postData && e.postData.contents) {
-    try { return JSON.parse(e.postData.contents); } catch (err) {}
+    try { data = JSON.parse(e.postData.contents); } catch (err) { data = e.parameter || {}; }
+  } else {
+    data = e.parameter || {};
   }
-  return e.parameter || {};
+  ['idFile', 'headshotFile', 'compCardFile'].forEach(key => {
+    if (typeof data[key] === 'string' && data[key]) {
+      try { data[key] = JSON.parse(data[key]); } catch (err) {}
+    }
+  });
+  if (typeof data.photoFiles === 'string' && data.photoFiles) {
+    try { data.photoFiles = JSON.parse(data.photoFiles); } catch (err) { data.photoFiles = []; }
+  }
+  if (!Array.isArray(data.photoFiles)) data.photoFiles = [];
+  return data;
 }
 
 function headers(sheet) { return sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]; }
@@ -150,7 +162,7 @@ function rejectSubmission(e) {
 function approvedModels(e) {
   const data = sh(SHEET_APPROVED).getDataRange().getValues();
   const h = data.shift();
-  const models = data.filter(r => String(r[15]).toLowerCase() === 'approved').map(r => {
+  const models = data.filter(r => String(r[15]).toLowerCase() === 'approved' && String(r[2] || '').trim()).map(r => {
     const o = {};
     h.forEach((x, i) => o[String(x)] = r[i]);
     return { id: o['Model ID'], number: o.Number, name: o.Name, age: o.Age, instagram: o['IG Handle'], city: o.City, state: o.State, height: o.Height, measurements: o.Measurements, naturalHairColor: o['Natural Hair Color'], naturalEyeColor: o['Natural Eye Color'], headshotUrl: o['Headshot URL'], image2Url: o['Image 2 URL'], image3Url: o['Image 3 URL'], voteCount: o['Vote Count'] || 0 };
