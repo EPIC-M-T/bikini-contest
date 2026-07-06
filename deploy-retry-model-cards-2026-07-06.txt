@@ -1,0 +1,1 @@
+Trigger model card page patch workflow after adding model-card assets and Apps Script starter.
