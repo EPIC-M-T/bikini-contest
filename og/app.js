@@ -74,3 +74,17 @@ if ('IntersectionObserver' in window) {
 } else {
   cards.forEach(card => card.classList.add('is-visible'));
 }
+
+if (!document.querySelector('link[href="model-cards.css"]')) {
+  const modelCardCss = document.createElement('link');
+  modelCardCss.rel = 'stylesheet';
+  modelCardCss.href = 'model-cards.css';
+  document.head.appendChild(modelCardCss);
+}
+
+if (!document.querySelector('script[src="model-cards.js"]')) {
+  const modelCardScript = document.createElement('script');
+  modelCardScript.src = 'model-cards.js';
+  modelCardScript.defer = true;
+  document.body.appendChild(modelCardScript);
+}
