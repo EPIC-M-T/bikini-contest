@@ -49,7 +49,7 @@ function readFileAsDataURL(file) {
   });
 }
 
-async function imageToDataURL(file, maxSide = 1600, quality = .78) {
+async function imageToDataURL(file, maxSide = 1400, quality = .74) {
   if (!file || !file.type.startsWith('image/')) return readFileAsDataURL(file);
   const dataUrl = await readFileAsDataURL(file);
   return new Promise(resolve => {
@@ -73,7 +73,7 @@ async function packFile(file) {
 }
 
 async function packFiles(input) {
-  return Promise.all([...(input?.files || [])].map(packFile));
+  return Promise.all([...(input?.files || [])].slice(0, 10).map(packFile));
 }
 
 photos?.addEventListener('change', () => {
@@ -98,34 +98,37 @@ form?.addEventListener('submit', async event => {
     showToast('Uploading images and sending your submission...');
 
     const packedPhotos = await packFiles(document.querySelector('#photos'));
-    const payload = {
-      action: 'submitEntry',
-      name: document.querySelector('#name')?.value || '',
-      age: document.querySelector('#age')?.value || '',
-      email: document.querySelector('#email')?.value || '',
-      phone: document.querySelector('#phone')?.value || '',
-      instagram: document.querySelector('#instagram')?.value || '',
-      city: locationParts[0],
-      state: locationParts[1],
-      height: document.querySelector('#height')?.value || '',
-      measurements: document.querySelector('#measurements')?.value || '',
-      shoeSize: shoeDressParts[0],
-      dressSize: shoeDressParts[1],
-      naturalHairColor: hairEyesParts[0],
-      naturalEyeColor: hairEyesParts[1],
-      agency: document.querySelector('#agency')?.value || '',
-      portfolio: document.querySelector('#portfolio')?.value || '',
-      notes: document.querySelector('#notes')?.value || '',
-      sourcePage: location.href,
-      userAgent: navigator.userAgent,
-      idFile: await packFile(document.querySelector('#idUpload')?.files?.[0]),
-      headshotFile: await packFile(document.querySelector('#headshot')?.files?.[0]),
-      photoFiles: packedPhotos,
-      compCardFile: await packFile(document.querySelector('#compCardUpload')?.files?.[0])
-    };
+    const headshotFile = await packFile(document.querySelector('#headshot')?.files?.[0]);
+    const idFile = await packFile(document.querySelector('#idUpload')?.files?.[0]);
+    const compCardFile = await packFile(document.querySelector('#compCardUpload')?.files?.[0]);
+
+    const payload = new FormData();
+    payload.append('action', 'submitEntry');
+    payload.append('name', document.querySelector('#name')?.value || '');
+    payload.append('age', document.querySelector('#age')?.value || '');
+    payload.append('email', document.querySelector('#email')?.value || '');
+    payload.append('phone', document.querySelector('#phone')?.value || '');
+    payload.append('instagram', document.querySelector('#instagram')?.value || '');
+    payload.append('city', locationParts[0]);
+    payload.append('state', locationParts[1]);
+    payload.append('height', document.querySelector('#height')?.value || '');
+    payload.append('measurements', document.querySelector('#measurements')?.value || '');
+    payload.append('shoeSize', shoeDressParts[0]);
+    payload.append('dressSize', shoeDressParts[1]);
+    payload.append('naturalHairColor', hairEyesParts[0]);
+    payload.append('naturalEyeColor', hairEyesParts[1]);
+    payload.append('agency', document.querySelector('#agency')?.value || '');
+    payload.append('portfolio', document.querySelector('#portfolio')?.value || '');
+    payload.append('notes', document.querySelector('#notes')?.value || '');
+    payload.append('sourcePage', location.href);
+    payload.append('userAgent', navigator.userAgent);
+    payload.append('idFile', JSON.stringify(idFile));
+    payload.append('headshotFile', JSON.stringify(headshotFile));
+    payload.append('photoFiles', JSON.stringify(packedPhotos));
+    payload.append('compCardFile', JSON.stringify(compCardFile));
 
     submitButton.textContent = 'Submitting...';
-    await fetch(SUBMISSION_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
+    await fetch(SUBMISSION_URL, { method: 'POST', mode: 'no-cors', body: payload });
     form.reset();
     if (selected) selected.textContent = '0 images selected.';
     showToast('Thank you! Your EPIC Bikini Contest submission has been sent for contestant review.');
