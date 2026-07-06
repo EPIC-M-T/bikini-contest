@@ -3,11 +3,13 @@ const toggle = document.querySelector('.mobile-toggle');
 const form = document.querySelector('#contestForm');
 const toast = document.querySelector('#toast');
 const overlay = document.querySelector('#heroGifOverlay');
-const heroBadge = overlay?.closest('.hero-badge');
+const heroBadge = overlay?.closest('.hero-badge') || document.querySelector('.hero-badge');
 const photos = document.querySelector('#photos');
 const selected = document.querySelector('#selectedFiles');
 const prize = document.querySelector('.hero-prize');
 const cards = [...document.querySelectorAll('.asset-card')];
+
+if (overlay && heroBadge) heroBadge.classList.add('has-intro');
 
 toggle?.addEventListener('click', () => {
   const open = nav.classList.toggle('is-open');
