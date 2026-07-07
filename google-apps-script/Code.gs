@@ -129,17 +129,33 @@ function uploadFolder() {
   return folder;
 }
 
+function extensionForMime(mime) {
+  mime = String(mime || '').toLowerCase();
+  if (mime === 'image/jpeg' || mime === 'image/jpg') return '.jpg';
+  if (mime === 'image/png') return '.png';
+  if (mime === 'image/webp') return '.webp';
+  if (mime === 'application/pdf') return '.pdf';
+  return '';
+}
+
+function normalizedFileName(name, mime) {
+  const ext = extensionForMime(mime);
+  const base = String(name || 'upload').replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'upload';
+  return base + ext;
+}
+
 function savePackedFile(file, prefix, makePublic) {
   if (!file || !file.dataUrl) return '';
   const match = String(file.dataUrl).match(/^data:([^;]+);base64,(.+)$/);
   if (!match) return '';
-  const mime = file.type || match[1] || 'application/octet-stream';
-  const safeName = String(file.name || 'upload').replace(/[^a-zA-Z0-9._-]+/g, '-');
+  const mime = match[1] || file.type || 'application/octet-stream';
+  const safeName = normalizedFileName(file.name, mime);
   const bytes = Utilities.base64Decode(match[2]);
   const blob = Utilities.newBlob(bytes, mime, prefix + '-' + Date.now() + '-' + safeName);
   const saved = uploadFolder().createFile(blob);
   if (makePublic) saved.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-  return makePublic ? 'https://drive.google.com/thumbnail?id=' + saved.getId() + '&sz=w1200' : saved.getUrl();
+  const id = saved.getId();
+  return makePublic ? 'https://drive.google.com/thumbnail?id=' + id + '&sz=w1200' : saved.getUrl();
 }
 
 function submitTextEntry(p, e) {
@@ -208,18 +224,50 @@ function approveUrl(id, token) { return ScriptApp.getService().getUrl() + '?acti
 function rejectUrl(id, token) { return ScriptApp.getService().getUrl() + '?action=reject&id=' + encodeURIComponent(id) + '&token=' + encodeURIComponent(token); }
 
 function detailRowsFromRow(r) {
-  const rows = [['Name', r.Name], ['Age', r.Age], ['Email', r.Email], ['Phone', r.Phone], ['IG Handle', r['IG Handle']], ['City', r.City], ['State', r.State], ['Height', r.Height], ['Measurements', r.Measurements], ['Natural Hair Color', r['Natural Hair Color']], ['Natural Eye Color', r['Natural Eye Color']], ['Shoe Size', r['Shoe Size']], ['Dress Size', r['Dress Size']], ['Agency / Booking Contact', r['Agency or Booking Contact']], ['Portfolio', r['Portfolio Link']], ['Notes', r.Notes]];
+  const rows = [['Name', r.Name], ['Age', r.Age], ['Email', r.Email], ['Phone', r.Phone], ['IG Handle', r['IG Handle']], ['City', r.City], ['State', r.State], ['Height', r.Height], ['Measurements', r.Measurements], ['Natural Hair Color', r['Natural Hair Color']], ['Natural Eye Color', r['Natural Eye Color']], ['Shoe Size', r['Shoe Size']], ['Agency / Booking Contact', r['Agency or Booking Contact']], ['Portfolio', r['Portfolio Link']], ['Notes', r.Notes]];
   return '<table style="border-collapse:collapse;width:100%;max-width:760px">' + rows.map(row => '<tr><td style="padding:7px 10px;border:1px solid #ddd;background:#f6f1e4;font-weight:bold">' + escHtml(row[0]) + '</td><td style="padding:7px 10px;border:1px solid #ddd">' + escHtml(row[1] || '') + '</td></tr>').join('') + '</table>';
 }
 
+function fileIdFromUrl(url) {
+  const text = String(url || '');
+  const thumb = text.match(/[?&]id=([^&]+)/);
+  if (thumb) return thumb[1];
+  const drive = text.match(/\/d\/([^/]+)/);
+  return drive ? drive[1] : '';
+}
+
+function driveViewUrl(url) {
+  const id = fileIdFromUrl(url);
+  return id ? 'https://drive.google.com/file/d/' + id + '/view' : url;
+}
+
 function imageBlockFromRow(r) {
-  const images = [r['Headshot URL'], r['Image 2 URL'], r['Image 3 URL']].filter(Boolean);
-  return '<h3>Card Images</h3><div style="display:flex;gap:12px;flex-wrap:wrap">' + images.map(url => '<a href="' + url + '" target="_blank"><img src="' + url + '" style="width:180px;max-height:240px;object-fit:cover;border-radius:12px;border:1px solid #d4af37"></a>').join('') + '</div>' + (r['Additional Image URLs'] ? '<p><b>Public card image links:</b><br>' + escHtml(r['Additional Image URLs']).replace(/\n/g, '<br>') + '</p>' : '') + (r['ID URL'] ? '<p><b>ID upload:</b> <a href="' + r['ID URL'] + '">View</a></p>' : '') + (r['Comp Card URL'] ? '<p><b>Comp card:</b> <a href="' + r['Comp Card URL'] + '">View</a></p>' : '');
+  const images = [['Headshot', r['Headshot URL']], ['Reveal Image 1', r['Image 2 URL']], ['Reveal Image 2', r['Image 3 URL']]].filter(item => item[1]);
+  let html = '<h3>Card Images</h3>';
+  if (images.length) {
+    html += '<div style="display:flex;gap:14px;flex-wrap:wrap;margin:10px 0 16px">' + images.map(item => '<div style="width:190px"><p style="font-weight:bold;margin:0 0 6px">' + escHtml(item[0]) + '</p><a href="' + driveViewUrl(item[1]) + '" target="_blank"><img src="' + item[1] + '" style="width:180px;max-height:240px;object-fit:cover;border-radius:12px;border:1px solid #d4af37;background:#f7f7f7"></a><p style="font-size:12px;margin:6px 0 0"><a href="' + driveViewUrl(item[1]) + '" target="_blank">Open full image</a></p></div>').join('') + '</div>';
+  } else {
+    html += '<p>No card images were saved for this entry.</p>';
+  }
+  html += (r['Additional Image URLs'] ? '<p><b>Public card image links:</b><br>' + escHtml(r['Additional Image URLs']).replace(/\n/g, '<br>') + '</p>' : '');
+  html += (r['ID URL'] ? '<p><b>ID upload:</b> <a href="' + r['ID URL'] + '">View</a></p>' : '');
+  html += (r['Comp Card URL'] ? '<p><b>Comp card:</b> <a href="' + r['Comp Card URL'] + '">View</a></p>' : '');
+  return html;
+}
+
+function applicantEmailHtml(r) {
+  return '<div style="font-family:Arial,sans-serif;line-height:1.5;color:#111"><h2 style="margin:0 0 12px">EPIC Bikini Contest Submission Received</h2><p>Hi ' + escHtml(r.Name || 'there') + ',</p><p>We received your EPIC Bikini Contest submission and our team will review your materials.</p><p>Selected contestants will be contacted by email with next steps.</p><p>Thank you,<br>EPIC Models &amp; Talent</p></div>';
 }
 
 function sendEmailsFromRow(r) {
+  const shortId = String(r['Submission ID'] || '').slice(0, 8);
   if (r.Email) {
-    MailApp.sendEmail({ to: r.Email, subject: 'EPIC Bikini Contest submission received', htmlBody: '<p>Hi ' + escHtml(r.Name || 'there') + ',</p><p>We received your EPIC Bikini Contest submission. Our team will review your materials and contact selected contestants by email.</p><p>Thank you,<br>EPIC Models & Talent</p>' });
+    MailApp.sendEmail({
+      to: r.Email,
+      subject: 'EPIC Bikini Contest submission received - ' + (r.Name || 'Model Entry') + (shortId ? ' #' + shortId : ''),
+      body: 'Hi ' + (r.Name || 'there') + ',\n\nWe received your EPIC Bikini Contest submission and our team will review your materials. Selected contestants will be contacted by email with next steps.\n\nThank you,\nEPIC Models & Talent',
+      htmlBody: applicantEmailHtml(r)
+    });
   }
   const html = '<h2>New EPIC Bikini Contest Submission</h2>' + detailRowsFromRow(r) + imageBlockFromRow(r) + '<p style="margin-top:22px"><a href="' + r['Approval URL'] + '" style="background:#16a34a;color:white;padding:13px 20px;border-radius:8px;text-decoration:none;font-weight:bold">APPROVE & PUBLISH MODEL CARD</a> &nbsp; <a href="' + r['Reject URL'] + '" style="background:#b91c1c;color:white;padding:13px 20px;border-radius:8px;text-decoration:none;font-weight:bold">REJECT</a></p>';
   MailApp.sendEmail({ to: ADMIN_EMAIL, subject: 'New EPIC Bikini Contest submission: ' + (r.Name || 'Model Entry'), htmlBody: html });
@@ -279,3 +327,18 @@ function vote(e) {
 
 function escHtml(value) { return String(value || '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c])); }
 function slug(value) { return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
+
+function testDeployedWebAppGetStatus() {
+  const webAppUrl = 'https://script.google.com/macros/s/AKfycbxVwGX70-fL-QM1nfKqlSyNdrh0hq_CFwBsKvwYgZ_AEbJL6oLufGXzLLqP6zGEtlCN/exec?action=status';
+  const response = UrlFetchApp.fetch(webAppUrl, { method: 'get', muteHttpExceptions: true, followRedirects: true });
+  Logger.log('Status Code: ' + response.getResponseCode());
+  Logger.log('Response Text: ' + response.getContentText().slice(0, 1000));
+}
+
+function testDeployedWebAppTextOnly() {
+  const webAppUrl = 'https://script.google.com/macros/s/AKfycbxVwGX70-fL-QM1nfKqlSyNdrh0hq_CFwBsKvwYgZ_AEbJL6oLufGXzLLqP6zGEtlCN/exec';
+  const payload = { action: 'submitText', submissionId: 'deployed-text-test-' + Date.now(), name: 'Deployed Text Test', age: '25', email: ADMIN_EMAIL, phone: '555-555-5555', instagram: '@deployedtexttest', city: 'Grand Rapids', state: 'MI', height: "5'8", measurements: '32/24/36', naturalHairColor: 'Brown', naturalEyeColor: 'Brown', shoeSize: '8', dressSize: '4', agency: 'Direct Test', portfolio: 'https://example.com', notes: 'Testing deployed Web App text-only submission.', sourcePage: 'Apps Script deployed text-only test', userAgent: 'Apps Script UrlFetchApp' };
+  const response = UrlFetchApp.fetch(webAppUrl, { method: 'post', payload: payload, muteHttpExceptions: true, followRedirects: true });
+  Logger.log('Status Code: ' + response.getResponseCode());
+  Logger.log('Response Text: ' + response.getContentText().slice(0, 1000));
+}
