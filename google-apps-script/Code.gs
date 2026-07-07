@@ -6,29 +6,46 @@ const SHEET_VOTES = 'Votes';
 const UPLOAD_FOLDER_NAME = 'EPIC Bikini Contest Uploads';
 
 function doGet(e) {
+  e = e || { parameter: {} };
+  e.parameter = e.parameter || {};
   const action = String(e.parameter.action || 'approvedModels');
   if (action === 'approve') return approveSubmission(e);
   if (action === 'reject') return rejectSubmission(e);
   if (action === 'vote') return vote(e);
+  if (action === 'status') return output({ ok: true, message: 'EPIC Apps Script is running', sheetId: SPREADSHEET_ID }, e);
   return approvedModels(e);
 }
 
 function doPost(e) {
+  e = e || { parameter: {}, postData: { contents: '' } };
   return submitEntry(e);
+}
+
+function smokeTest() {
+  Logger.log('EPIC Apps Script smoke test started.');
+  Logger.log('Spreadsheet title: ' + ss().getName());
+  Logger.log('Submissions sheet exists: ' + Boolean(sh(SHEET_SUBMISSIONS)));
+  Logger.log('Approved Models sheet exists: ' + Boolean(sh(SHEET_APPROVED)));
+  Logger.log('Votes sheet exists: ' + Boolean(sh(SHEET_VOTES)));
+  Logger.log('Run complete. This test does not submit a model entry.');
 }
 
 function ss() { return SpreadsheetApp.openById(SPREADSHEET_ID); }
 function sh(name) { return ss().getSheetByName(name); }
 
 function output(data, e) {
-  const cb = e && e.parameter && e.parameter.callback;
+  e = e || { parameter: {} };
+  e.parameter = e.parameter || {};
+  const cb = e.parameter.callback;
   const text = cb ? cb + '(' + JSON.stringify(data) + ')' : JSON.stringify(data);
   return ContentService.createTextOutput(text).setMimeType(cb ? ContentService.MimeType.JAVASCRIPT : ContentService.MimeType.JSON);
 }
 
 function parsePayload(e) {
+  e = e || { parameter: {}, postData: { contents: '' } };
+  e.parameter = e.parameter || {};
   let data = {};
-  if (e && e.postData && e.postData.contents) {
+  if (e.postData && e.postData.contents) {
     try { data = JSON.parse(e.postData.contents); } catch (err) { data = e.parameter || {}; }
   } else {
     data = e.parameter || {};
@@ -134,6 +151,8 @@ function sendEmails(p, files, id, token) {
 }
 
 function approveSubmission(e) {
+  e = e || { parameter: {} };
+  e.parameter = e.parameter || {};
   const sheet = sh(SHEET_SUBMISSIONS);
   const rowNum = findRow(sheet, 'Submission ID', e.parameter.id);
   if (rowNum < 2) return output({ ok: false, error: 'Submission not found' }, e);
@@ -150,6 +169,8 @@ function approveSubmission(e) {
 }
 
 function rejectSubmission(e) {
+  e = e || { parameter: {} };
+  e.parameter = e.parameter || {};
   const sheet = sh(SHEET_SUBMISSIONS);
   const rowNum = findRow(sheet, 'Submission ID', e.parameter.id);
   if (rowNum < 2) return output({ ok: false, error: 'Submission not found' }, e);
@@ -171,6 +192,8 @@ function approvedModels(e) {
 }
 
 function vote(e) {
+  e = e || { parameter: {} };
+  e.parameter = e.parameter || {};
   const modelId = e.parameter.modelId;
   const approved = sh(SHEET_APPROVED);
   const rowNum = findRow(approved, 'Model ID', modelId);
