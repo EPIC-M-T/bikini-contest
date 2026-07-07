@@ -1,344 +1,45 @@
-const SPREADSHEET_ID = '1zpRxGl9cBad2m5vJZmIM-gUaYUb-IB0aWYQPDbUmj6A';
-const ADMIN_EMAIL = 'book@epicmodelsandtalent.com';
-const SHEET_SUBMISSIONS = 'Submissions';
-const SHEET_APPROVED = 'Approved Models';
-const SHEET_VOTES = 'Votes';
-const SHEET_DIAGNOSTICS = 'Diagnostics';
-const UPLOAD_FOLDER_NAME = 'EPIC Bikini Contest Uploads';
+const SPREADSHEET_ID='1zpRxGl9cBad2m5vJZmIM-gUaYUb-IB0aWYQPDbUmj6A';
+const ADMIN_EMAIL='book@epicmodelsandtalent.com';
+const SHEET_SUBMISSIONS='Submissions',SHEET_APPROVED='Approved Models',SHEET_VOTES='Votes',SHEET_DIAGNOSTICS='Diagnostics';
+const UPLOAD_FOLDER_NAME='EPIC Bikini Contest Uploads';
 
-function doGet(e) {
-  e = normalizeEvent(e);
-  const action = String(e.parameter.action || 'approvedModels');
-  try {
-    if (action === 'approve') return approveSubmission(e);
-    if (action === 'reject') return rejectSubmission(e);
-    if (action === 'vote') return vote(e);
-    if (action === 'status') return output({ ok: true, message: 'EPIC Apps Script is running', sheetId: SPREADSHEET_ID }, e);
-    return approvedModels(e);
-  } catch (err) {
-    logDiag('doGet:' + action, false, 'GET failed', {}, err);
-    return output({ ok: false, error: String(err) }, e);
-  }
-}
-
-function doPost(e) {
-  e = normalizeEvent(e);
-  const p = parsePayload(e);
-  const action = String(p.action || 'submitEntry');
-  try {
-    if (action === 'submitText') return submitTextEntry(p, e);
-    if (action === 'uploadImage') return uploadImage(p, e);
-    if (action === 'finalizeSubmission') return finalizeSubmission(p, e);
-    return submitEntryLegacy(p, e);
-  } catch (err) {
-    logDiag('doPost:' + action, false, 'POST failed', p, err);
-    return output({ ok: false, error: String(err) }, e);
-  }
-}
-
-function smokeTest() {
-  logDiag('smokeTest', true, 'Manual smoke test ran', { name: 'Manual Test', email: ADMIN_EMAIL }, null);
-  Logger.log('Spreadsheet title: ' + ss().getName());
-  Logger.log('Submissions: ' + Boolean(sh(SHEET_SUBMISSIONS)));
-  Logger.log('Approved Models: ' + Boolean(sh(SHEET_APPROVED)));
-  Logger.log('Votes: ' + Boolean(sh(SHEET_VOTES)));
-  Logger.log('Diagnostics: ' + Boolean(sh(SHEET_DIAGNOSTICS)));
-}
-
-function normalizeEvent(e) {
-  e = e || {};
-  e.parameter = e.parameter || {};
-  e.postData = e.postData || { contents: '' };
-  return e;
-}
-
-function ss() { return SpreadsheetApp.openById(SPREADSHEET_ID); }
-function sh(name) { return ss().getSheetByName(name); }
-
-function output(data, e) {
-  e = normalizeEvent(e);
-  const cb = e.parameter.callback;
-  const text = cb ? cb + '(' + JSON.stringify(data) + ')' : JSON.stringify(data);
-  return ContentService.createTextOutput(text).setMimeType(cb ? ContentService.MimeType.JAVASCRIPT : ContentService.MimeType.JSON);
-}
-
-function parsePayload(e) {
-  e = normalizeEvent(e);
-  let data = {};
-  if (e.postData && e.postData.contents) {
-    try { data = JSON.parse(e.postData.contents); } catch (err) { data = e.parameter || {}; }
-  } else {
-    data = e.parameter || {};
-  }
-  ['file', 'idFile', 'headshotFile', 'compCardFile'].forEach(key => {
-    if (typeof data[key] === 'string' && data[key]) {
-      try { data[key] = JSON.parse(data[key]); } catch (err) {}
-    }
-  });
-  if (typeof data.photoFiles === 'string' && data.photoFiles) {
-    try { data.photoFiles = JSON.parse(data.photoFiles); } catch (err) { data.photoFiles = []; }
-  }
-  if (!Array.isArray(data.photoFiles)) data.photoFiles = [];
-  return data;
-}
-
-function headers(sheet) { return sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]; }
-function headerIndex(sheet, header) { return headers(sheet).indexOf(header) + 1; }
-
-function rowObject(sheet, rowNum) {
-  const h = headers(sheet);
-  const r = sheet.getRange(rowNum, 1, 1, sheet.getLastColumn()).getValues()[0];
-  const o = {};
-  h.forEach((x, i) => o[String(x)] = r[i]);
-  return o;
-}
-
-function findRow(sheet, header, value) {
-  const col = headerIndex(sheet, header);
-  if (!col || sheet.getLastRow() < 2) return -1;
-  const values = sheet.getRange(2, col, sheet.getLastRow() - 1, 1).getValues().flat();
-  const idx = values.findIndex(v => String(v) === String(value));
-  return idx === -1 ? -1 : idx + 2;
-}
-
-function setByHeader(sheet, rowNum, header, value) {
-  const col = headerIndex(sheet, header);
-  if (col) sheet.getRange(rowNum, col).setValue(value);
-}
-
-function logDiag(stage, ok, message, data, err) {
-  try {
-    const sheet = sh(SHEET_DIAGNOSTICS);
-    if (!sheet) return;
-    data = data || {};
-    const keys = Object.keys(data).join(', ');
-    const photoCount = Array.isArray(data.photoFiles) ? data.photoFiles.length : (data.file ? 1 : 0);
-    const hasHeadshot = Boolean(data.headshotFile || data.role === 'headshot');
-    sheet.appendRow([new Date(), stage, ok ? 'TRUE' : 'FALSE', message || '', data.name || '', data.email || '', keys, photoCount, hasHeadshot, err ? String(err.stack || err) : '', data.userAgent || '', data.sourcePage || '']);
-  } catch (logErr) {
-    Logger.log('Diagnostics logging failed: ' + logErr);
-  }
-}
-
-function uploadFolder() {
-  const props = PropertiesService.getScriptProperties();
-  const storedId = props.getProperty('UPLOAD_FOLDER_ID');
-  if (storedId) return DriveApp.getFolderById(storedId);
-  const folder = DriveApp.createFolder(UPLOAD_FOLDER_NAME);
-  props.setProperty('UPLOAD_FOLDER_ID', folder.getId());
-  return folder;
-}
-
-function extensionForMime(mime) {
-  mime = String(mime || '').toLowerCase();
-  if (mime === 'image/jpeg' || mime === 'image/jpg') return '.jpg';
-  if (mime === 'image/png') return '.png';
-  if (mime === 'image/webp') return '.webp';
-  if (mime === 'application/pdf') return '.pdf';
-  return '';
-}
-
-function normalizedFileName(name, mime) {
-  const ext = extensionForMime(mime);
-  const base = String(name || 'upload').replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'upload';
-  return base + ext;
-}
-
-function savePackedFile(file, prefix, makePublic) {
-  if (!file || !file.dataUrl) return '';
-  const match = String(file.dataUrl).match(/^data:([^;]+);base64,(.+)$/);
-  if (!match) return '';
-  const mime = match[1] || file.type || 'application/octet-stream';
-  const safeName = normalizedFileName(file.name, mime);
-  const bytes = Utilities.base64Decode(match[2]);
-  const blob = Utilities.newBlob(bytes, mime, prefix + '-' + Date.now() + '-' + safeName);
-  const saved = uploadFolder().createFile(blob);
-  if (makePublic) saved.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-  const id = saved.getId();
-  return makePublic ? 'https://drive.google.com/thumbnail?id=' + id + '&sz=w1200' : saved.getUrl();
-}
-
-function submitTextEntry(p, e) {
-  const id = p.submissionId || Utilities.getUuid();
-  const token = Utilities.getUuid();
-  const sheet = sh(SHEET_SUBMISSIONS);
-  const existing = findRow(sheet, 'Submission ID', id);
-  if (existing > 1) return output({ ok: true, submissionId: id, message: 'Already exists' }, e);
-  sheet.appendRow([id, new Date(), 'Uploads Pending', token, p.name || '', p.age || '', p.email || '', p.phone || '', p.instagram || '', p.city || '', p.state || '', p.height || '', p.measurements || '', p.naturalHairColor || '', p.naturalEyeColor || '', p.shoeSize || '', p.dressSize || '', p.agency || '', p.portfolio || '', '', '', '', '', '', '', p.notes || '', '', '', '', p.sourcePage || '', p.userAgent || '', '', approveUrl(id, token), rejectUrl(id, token), new Date(), true, true]);
-  logDiag('submitText', true, 'Text entry captured', p, null);
-  return output({ ok: true, submissionId: id }, e);
-}
-
-function uploadImage(p, e) {
-  const id = p.submissionId;
-  const role = String(p.role || 'photo');
-  const file = p.file;
-  const sheet = sh(SHEET_SUBMISSIONS);
-  const rowNum = findRow(sheet, 'Submission ID', id);
-  if (rowNum < 2) throw new Error('Submission not found for upload: ' + id);
-  const isPublic = ['headshot', 'reveal1', 'reveal2', 'photo'].indexOf(role) !== -1;
-  const url = savePackedFile(file, id + '-' + role, isPublic);
-  if (!url) throw new Error('File did not save for role: ' + role);
-  if (role === 'headshot') setByHeader(sheet, rowNum, 'Headshot URL', url);
-  if (role === 'reveal1') setByHeader(sheet, rowNum, 'Image 2 URL', url);
-  if (role === 'reveal2') setByHeader(sheet, rowNum, 'Image 3 URL', url);
-  if (role === 'id') setByHeader(sheet, rowNum, 'ID URL', url);
-  if (role === 'comp') setByHeader(sheet, rowNum, 'Comp Card URL', url);
-  if (role === 'photo' || role === 'reveal1' || role === 'reveal2') {
-    const r = rowObject(sheet, rowNum);
-    const current = r['Additional Image URLs'] ? String(r['Additional Image URLs']) + '\n' : '';
-    setByHeader(sheet, rowNum, 'Additional Image URLs', current + url);
-  }
-  setByHeader(sheet, rowNum, 'Last Updated', new Date());
-  logDiag('uploadImage:' + role, true, 'Image uploaded', { submissionId: id, role: role, file: file ? file.name : '' }, null);
-  return output({ ok: true, submissionId: id, role: role, url: url }, e);
-}
-
-function finalizeSubmission(p, e) {
-  const id = p.submissionId;
-  const sheet = sh(SHEET_SUBMISSIONS);
-  const rowNum = findRow(sheet, 'Submission ID', id);
-  if (rowNum < 2) throw new Error('Submission not found for finalize: ' + id);
-  const r = rowObject(sheet, rowNum);
-  if (!r['Image 2 URL'] && r['Headshot URL']) setByHeader(sheet, rowNum, 'Image 2 URL', r['Headshot URL']);
-  if (!r['Image 3 URL'] && (r['Image 2 URL'] || r['Headshot URL'])) setByHeader(sheet, rowNum, 'Image 3 URL', r['Image 2 URL'] || r['Headshot URL']);
-  setByHeader(sheet, rowNum, 'Status', 'Pending Review');
-  setByHeader(sheet, rowNum, 'Last Updated', new Date());
-  sendEmailsFromRow(rowObject(sheet, rowNum));
-  logDiag('finalizeSubmission', true, 'Submission finalized and email sent', { submissionId: id, name: r.Name, email: r.Email }, null);
-  return output({ ok: true, submissionId: id }, e);
-}
-
-function submitEntryLegacy(p, e) {
-  const id = p.submissionId || Utilities.getUuid();
-  submitTextEntry(Object.assign({}, p, { submissionId: id }), e);
-  if (p.headshotFile) uploadImage({ submissionId: id, role: 'headshot', file: p.headshotFile }, e);
-  if (p.photoFiles && p.photoFiles[0]) uploadImage({ submissionId: id, role: 'reveal1', file: p.photoFiles[0] }, e);
-  if (p.photoFiles && p.photoFiles[1]) uploadImage({ submissionId: id, role: 'reveal2', file: p.photoFiles[1] }, e);
-  if (p.idFile) uploadImage({ submissionId: id, role: 'id', file: p.idFile }, e);
-  if (p.compCardFile) uploadImage({ submissionId: id, role: 'comp', file: p.compCardFile }, e);
-  return finalizeSubmission({ submissionId: id }, e);
-}
-
-function approveUrl(id, token) { return ScriptApp.getService().getUrl() + '?action=approve&id=' + encodeURIComponent(id) + '&token=' + encodeURIComponent(token); }
-function rejectUrl(id, token) { return ScriptApp.getService().getUrl() + '?action=reject&id=' + encodeURIComponent(id) + '&token=' + encodeURIComponent(token); }
-
-function detailRowsFromRow(r) {
-  const rows = [['Name', r.Name], ['Age', r.Age], ['Email', r.Email], ['Phone', r.Phone], ['IG Handle', r['IG Handle']], ['City', r.City], ['State', r.State], ['Height', r.Height], ['Measurements', r.Measurements], ['Natural Hair Color', r['Natural Hair Color']], ['Natural Eye Color', r['Natural Eye Color']], ['Shoe Size', r['Shoe Size']], ['Agency / Booking Contact', r['Agency or Booking Contact']], ['Portfolio', r['Portfolio Link']], ['Notes', r.Notes]];
-  return '<table style="border-collapse:collapse;width:100%;max-width:760px">' + rows.map(row => '<tr><td style="padding:7px 10px;border:1px solid #ddd;background:#f6f1e4;font-weight:bold">' + escHtml(row[0]) + '</td><td style="padding:7px 10px;border:1px solid #ddd">' + escHtml(row[1] || '') + '</td></tr>').join('') + '</table>';
-}
-
-function fileIdFromUrl(url) {
-  const text = String(url || '');
-  const thumb = text.match(/[?&]id=([^&]+)/);
-  if (thumb) return thumb[1];
-  const drive = text.match(/\/d\/([^/]+)/);
-  return drive ? drive[1] : '';
-}
-
-function driveViewUrl(url) {
-  const id = fileIdFromUrl(url);
-  return id ? 'https://drive.google.com/file/d/' + id + '/view' : url;
-}
-
-function imageBlockFromRow(r) {
-  const images = [['Headshot', r['Headshot URL']], ['Reveal Image 1', r['Image 2 URL']], ['Reveal Image 2', r['Image 3 URL']]].filter(item => item[1]);
-  let html = '<h3>Card Images</h3>';
-  if (images.length) {
-    html += '<div style="display:flex;gap:14px;flex-wrap:wrap;margin:10px 0 16px">' + images.map(item => '<div style="width:190px"><p style="font-weight:bold;margin:0 0 6px">' + escHtml(item[0]) + '</p><a href="' + driveViewUrl(item[1]) + '" target="_blank"><img src="' + item[1] + '" style="width:180px;max-height:240px;object-fit:cover;border-radius:12px;border:1px solid #d4af37;background:#f7f7f7"></a><p style="font-size:12px;margin:6px 0 0"><a href="' + driveViewUrl(item[1]) + '" target="_blank">Open full image</a></p></div>').join('') + '</div>';
-  } else {
-    html += '<p>No card images were saved for this entry.</p>';
-  }
-  html += (r['Additional Image URLs'] ? '<p><b>Public card image links:</b><br>' + escHtml(r['Additional Image URLs']).replace(/\n/g, '<br>') + '</p>' : '');
-  html += (r['ID URL'] ? '<p><b>ID upload:</b> <a href="' + r['ID URL'] + '">View</a></p>' : '');
-  html += (r['Comp Card URL'] ? '<p><b>Comp card:</b> <a href="' + r['Comp Card URL'] + '">View</a></p>' : '');
-  return html;
-}
-
-function applicantEmailHtml(r) {
-  return '<div style="font-family:Arial,sans-serif;line-height:1.5;color:#111"><h2 style="margin:0 0 12px">EPIC Bikini Contest Submission Received</h2><p>Hi ' + escHtml(r.Name || 'there') + ',</p><p>We received your EPIC Bikini Contest submission and our team will review your materials.</p><p>Selected contestants will be contacted by email with next steps.</p><p>Thank you,<br>EPIC Models &amp; Talent</p></div>';
-}
-
-function sendEmailsFromRow(r) {
-  const shortId = String(r['Submission ID'] || '').slice(0, 8);
-  if (r.Email) {
-    MailApp.sendEmail({
-      to: r.Email,
-      subject: 'EPIC Bikini Contest submission received - ' + (r.Name || 'Model Entry') + (shortId ? ' #' + shortId : ''),
-      body: 'Hi ' + (r.Name || 'there') + ',\n\nWe received your EPIC Bikini Contest submission and our team will review your materials. Selected contestants will be contacted by email with next steps.\n\nThank you,\nEPIC Models & Talent',
-      htmlBody: applicantEmailHtml(r)
-    });
-  }
-  const html = '<h2>New EPIC Bikini Contest Submission</h2>' + detailRowsFromRow(r) + imageBlockFromRow(r) + '<p style="margin-top:22px"><a href="' + r['Approval URL'] + '" style="background:#16a34a;color:white;padding:13px 20px;border-radius:8px;text-decoration:none;font-weight:bold">APPROVE & PUBLISH MODEL CARD</a> &nbsp; <a href="' + r['Reject URL'] + '" style="background:#b91c1c;color:white;padding:13px 20px;border-radius:8px;text-decoration:none;font-weight:bold">REJECT</a></p>';
-  MailApp.sendEmail({ to: ADMIN_EMAIL, subject: 'New EPIC Bikini Contest submission: ' + (r.Name || 'Model Entry'), htmlBody: html });
-}
-
-function approveSubmission(e) {
-  e = normalizeEvent(e);
-  const sheet = sh(SHEET_SUBMISSIONS);
-  const rowNum = findRow(sheet, 'Submission ID', e.parameter.id);
-  if (rowNum < 2) return output({ ok: false, error: 'Submission not found' }, e);
-  const r = rowObject(sheet, rowNum);
-  if (String(r['Approval Token']) !== String(e.parameter.token)) return output({ ok: false, error: 'Invalid token' }, e);
-  const approved = sh(SHEET_APPROVED);
-  const number = String(approved.getLastRow()).padStart(2, '0');
-  const modelId = Utilities.getUuid();
-  approved.appendRow([modelId, number, r.Name, r.Age, r['IG Handle'], r.City, r.State, r.Height, r.Measurements, r['Natural Hair Color'], r['Natural Eye Color'], r['Headshot URL'], r['Image 2 URL'], r['Image 3 URL'], 0, 'Approved', new Date(), r['Submission ID'], approved.getLastRow(), slug(r.Name), '', true, true]);
-  setByHeader(sheet, rowNum, 'Status', 'Approved');
-  setByHeader(sheet, rowNum, 'Approved Model Number', number);
-  setByHeader(sheet, rowNum, 'Approved At', new Date());
-  return HtmlService.createHtmlOutput('<h2>Approved</h2><p>The model card is now live in the approved feed.</p>');
-}
-
-function rejectSubmission(e) {
-  e = normalizeEvent(e);
-  const sheet = sh(SHEET_SUBMISSIONS);
-  const rowNum = findRow(sheet, 'Submission ID', e.parameter.id);
-  if (rowNum < 2) return output({ ok: false, error: 'Submission not found' }, e);
-  const r = rowObject(sheet, rowNum);
-  if (String(r['Approval Token']) !== String(e.parameter.token)) return output({ ok: false, error: 'Invalid token' }, e);
-  setByHeader(sheet, rowNum, 'Status', 'Rejected');
-  return HtmlService.createHtmlOutput('<h2>Rejected</h2><p>This entry was marked rejected.</p>');
-}
-
-function approvedModels(e) {
-  const data = sh(SHEET_APPROVED).getDataRange().getValues();
-  const h = data.shift();
-  const models = data.filter(r => String(r[15]).toLowerCase() === 'approved' && String(r[2] || '').trim()).map(r => {
-    const o = {};
-    h.forEach((x, i) => o[String(x)] = r[i]);
-    return { id: o['Model ID'], number: o.Number, name: o.Name, age: o.Age, instagram: o['IG Handle'], city: o.City, state: o.State, height: o.Height, measurements: o.Measurements, naturalHairColor: o['Natural Hair Color'], naturalEyeColor: o['Natural Eye Color'], headshotUrl: o['Headshot URL'], image2Url: o['Image 2 URL'], image3Url: o['Image 3 URL'], voteCount: o['Vote Count'] || 0 };
-  });
-  return output({ ok: true, models: models }, e);
-}
-
-function vote(e) {
-  e = normalizeEvent(e);
-  const modelId = e.parameter.modelId;
-  const approved = sh(SHEET_APPROVED);
-  const rowNum = findRow(approved, 'Model ID', modelId);
-  if (rowNum < 2) return output({ ok: false, error: 'Model not found' }, e);
-  const r = rowObject(approved, rowNum);
-  sh(SHEET_VOTES).appendRow([Utilities.getUuid(), new Date(), modelId, r.Number, r.Name, e.parameter.voter || '', e.parameter.source || '', '', '', false]);
-  const count = Number(r['Vote Count'] || 0) + 1;
-  setByHeader(approved, rowNum, 'Vote Count', count);
-  return output({ ok: true, modelId: modelId, voteCount: count }, e);
-}
-
-function escHtml(value) { return String(value || '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c])); }
-function slug(value) { return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
-
-function testDeployedWebAppGetStatus() {
-  const webAppUrl = 'https://script.google.com/macros/s/AKfycbxVwGX70-fL-QM1nfKqlSyNdrh0hq_CFwBsKvwYgZ_AEbJL6oLufGXzLLqP6zGEtlCN/exec?action=status';
-  const response = UrlFetchApp.fetch(webAppUrl, { method: 'get', muteHttpExceptions: true, followRedirects: true });
-  Logger.log('Status Code: ' + response.getResponseCode());
-  Logger.log('Response Text: ' + response.getContentText().slice(0, 1000));
-}
-
-function testDeployedWebAppTextOnly() {
-  const webAppUrl = 'https://script.google.com/macros/s/AKfycbxVwGX70-fL-QM1nfKqlSyNdrh0hq_CFwBsKvwYgZ_AEbJL6oLufGXzLLqP6zGEtlCN/exec';
-  const payload = { action: 'submitText', submissionId: 'deployed-text-test-' + Date.now(), name: 'Deployed Text Test', age: '25', email: ADMIN_EMAIL, phone: '555-555-5555', instagram: '@deployedtexttest', city: 'Grand Rapids', state: 'MI', height: "5'8", measurements: '32/24/36', naturalHairColor: 'Brown', naturalEyeColor: 'Brown', shoeSize: '8', dressSize: '4', agency: 'Direct Test', portfolio: 'https://example.com', notes: 'Testing deployed Web App text-only submission.', sourcePage: 'Apps Script deployed text-only test', userAgent: 'Apps Script UrlFetchApp' };
-  const response = UrlFetchApp.fetch(webAppUrl, { method: 'post', payload: payload, muteHttpExceptions: true, followRedirects: true });
-  Logger.log('Status Code: ' + response.getResponseCode());
-  Logger.log('Response Text: ' + response.getContentText().slice(0, 1000));
-}
+function doGet(e){e=evt(e);const a=String(e.parameter.action||'approvedModels');try{if(a==='approve')return approveSubmission(e);if(a==='reject')return rejectSubmission(e);if(a==='vote')return vote(e);if(a==='status')return out({ok:true,message:'EPIC Apps Script is running',sheetId:SPREADSHEET_ID},e);return approvedModels(e)}catch(err){diag('doGet:'+a,false,'GET failed',{},err);return out({ok:false,error:String(err)},e)}}
+function doPost(e){e=evt(e);const p=parsePayload(e),a=String(p.action||'submitEntry');try{if(a==='submitText')return submitTextEntry(p,e);if(a==='uploadImage')return uploadImage(p,e);if(a==='finalizeSubmission')return finalizeSubmission(p,e);return legacy(p,e)}catch(err){diag('doPost:'+a,false,'POST failed',p,err);return out({ok:false,error:String(err)},e)}}
+function smokeTest(){diag('smokeTest',true,'Manual smoke test ran',{name:'Manual Test',email:ADMIN_EMAIL},null);Logger.log('Spreadsheet title: '+ss().getName())}
+function evt(e){e=e||{};e.parameter=e.parameter||{};e.postData=e.postData||{contents:''};return e}
+function ss(){return SpreadsheetApp.openById(SPREADSHEET_ID)}
+function sh(n){return ss().getSheetByName(n)}
+function out(d,e){e=evt(e);const cb=e.parameter.callback,t=cb?cb+'('+JSON.stringify(d)+')':JSON.stringify(d);return ContentService.createTextOutput(t).setMimeType(cb?ContentService.MimeType.JAVASCRIPT:ContentService.MimeType.JSON)}
+function parsePayload(e){e=evt(e);let d={};if(e.postData&&e.postData.contents){try{d=JSON.parse(e.postData.contents)}catch(err){d=e.parameter||{}}}else d=e.parameter||{};['file','idFile','headshotFile','compCardFile'].forEach(k=>{if(typeof d[k]==='string'&&d[k]){try{d[k]=JSON.parse(d[k])}catch(err){}}});if(typeof d.photoFiles==='string'&&d.photoFiles){try{d.photoFiles=JSON.parse(d.photoFiles)}catch(err){d.photoFiles=[]}}if(!Array.isArray(d.photoFiles))d.photoFiles=[];return d}
+function heads(s){return s.getRange(1,1,1,s.getLastColumn()).getValues()[0].map(String)}
+function hidx(s,h){return heads(s).indexOf(h)+1}
+function obj(s,rn){const h=heads(s),r=s.getRange(rn,1,1,s.getLastColumn()).getValues()[0],o={};h.forEach((x,i)=>o[x]=r[i]);return o}
+function findRow(s,h,v){const c=hidx(s,h);if(!c||s.getLastRow()<2)return-1;const vals=s.getRange(2,c,s.getLastRow()-1,1).getValues().flat();const i=vals.findIndex(x=>String(x)===String(v));return i<0?-1:i+2}
+function setH(s,r,h,v){const c=hidx(s,h);if(c)s.getRange(r,c).setValue(v)}
+function appendH(s,m){const h=heads(s);s.appendRow(h.map(k=>Object.prototype.hasOwnProperty.call(m,k)?m[k]:''));return s.getLastRow()}
+function norm(v){return String(v||'').toLowerCase().replace(/\s+/g,'').trim()}
+function ig(v){return norm(String(v||'').replace(/^@/,''))}
+function dup(p){const s=sh(SHEET_SUBMISSIONS);if(!s||s.getLastRow()<2)return{duplicate:false,reason:''};const em=norm(p.email),ph=norm(p.phone).replace(/\D+/g,''),ins=ig(p.instagram);if(!em&&!ph&&!ins)return{duplicate:false,reason:''};const data=s.getDataRange().getValues(),h=data.shift().map(String),ix=n=>h.indexOf(n),ei=ix('Email'),pi=ix('Phone'),ii=ix('IG Handle'),si=ix('Status'),ni=ix('Name');for(const r of data){if(String(r[si]||'').toLowerCase()==='rejected')continue;if(em&&norm(r[ei])===em)return{duplicate:true,reason:'email matches '+(r[ni]||'existing entry')};if(ph&&norm(r[pi]).replace(/\D+/g,'')===ph)return{duplicate:true,reason:'phone matches '+(r[ni]||'existing entry')};if(ins&&ig(r[ii])===ins)return{duplicate:true,reason:'instagram matches '+(r[ni]||'existing entry')}}return{duplicate:false,reason:''}}
+function diag(stage,ok,msg,data,err){try{data=data||{};const s=sh(SHEET_DIAGNOSTICS);if(!s)return;const pc=Array.isArray(data.photoFiles)?data.photoFiles.length:(data.file?1:0);s.appendRow([new Date(),stage,ok?'TRUE':'FALSE',msg||'',data.name||'',data.email||'',Object.keys(data).join(', '),pc,Boolean(data.headshotFile||data.role==='headshot'),err?String(err.stack||err):'',data.userAgent||'',data.sourcePage||''])}catch(e){Logger.log('Diagnostics logging failed: '+e)}}
+function uploadFolder(){const p=PropertiesService.getScriptProperties(),id=p.getProperty('UPLOAD_FOLDER_ID');if(id){try{return DriveApp.getFolderById(id)}catch(e){p.deleteProperty('UPLOAD_FOLDER_ID')}}const it=DriveApp.getFoldersByName(UPLOAD_FOLDER_NAME),f=it.hasNext()?it.next():DriveApp.createFolder(UPLOAD_FOLDER_NAME);p.setProperty('UPLOAD_FOLDER_ID',f.getId());return f}
+function ext(m){m=String(m||'').toLowerCase();if(m==='image/jpeg'||m==='image/jpg')return'.jpg';if(m==='image/png')return'.png';if(m==='image/webp')return'.webp';if(m==='application/pdf')return'.pdf';return''}
+function fname(n,m){const e=ext(m);let b=String(n||'upload').replace(/[^a-zA-Z0-9._-]+/g,'-').replace(/^-+|-+$/g,'')||'upload';if(e&&!b.toLowerCase().endsWith(e))b=b.replace(/\.[^.]+$/,'')+e;return b}
+function saveFile(file,prefix,pub){if(!file||!file.dataUrl)return'';const m=String(file.dataUrl).match(/^data:([^;]+);base64,(.+)$/);if(!m)return'';const mime=m[1]||file.type||'application/octet-stream',blob=Utilities.newBlob(Utilities.base64Decode(m[2]),mime,prefix+'-'+Date.now()+'-'+fname(file.name,mime)),f=uploadFolder().createFile(blob);if(pub)f.setSharing(DriveApp.Access.ANYONE_WITH_LINK,DriveApp.Permission.VIEW);return pub?'https://drive.google.com/thumbnail?id='+f.getId()+'&sz=w1200':f.getUrl()}
+function submitTextEntry(p,e){const id=p.submissionId||Utilities.getUuid(),s=sh(SHEET_SUBMISSIONS);if(findRow(s,'Submission ID',id)>1)return out({ok:true,submissionId:id,message:'Already exists'},e);const token=Utilities.getUuid(),d=dup(p),now=new Date();appendH(s,{'Submission ID':id,'Timestamp':now,'Status':d.duplicate?'Possible Duplicate - Pending Review':'Uploads Pending','Approval Token':token,'Name':p.name||'','Age':p.age||'','Email':p.email||'','Phone':p.phone||'','IG Handle':p.instagram||'','City':p.city||'','State':p.state||'','Height':p.height||'','Measurements':p.measurements||'','Natural Hair Color':p.naturalHairColor||p.hairColor||'','Natural Eye Color':p.naturalEyeColor||p.eyeColor||'','Shoe Size':p.shoeSize||'','Favorite Movie':p.favoriteMovie||'','Agency or Booking Contact':p.agency||'','Portfolio Link':p.portfolio||'','Notes':p.notes||'','Source Page':p.sourcePage||'','User Agent':p.userAgent||'','Approval URL':approveUrl(id,token),'Reject URL':rejectUrl(id,token),'Last Updated':now,'Homepage Visible':true,'Entry Page Visible':true,'Duplicate Flag':d.duplicate,'Duplicate Reason':d.reason||''});diag('submitText',true,d.duplicate?'Text entry captured - possible duplicate':'Text entry captured',p,null);return out({ok:true,submissionId:id,duplicate:d.duplicate},e)}
+function uploadImage(p,e){const id=p.submissionId,role=String(p.role||'photo'),file=p.file,s=sh(SHEET_SUBMISSIONS),rn=findRow(s,'Submission ID',id);if(rn<2)throw new Error('Submission not found for upload: '+id);const pub=['headshot','reveal1','reveal2','photo'].indexOf(role)!==-1,url=saveFile(file,id+'-'+role,pub);if(!url)throw new Error('File did not save for role: '+role);if(role==='headshot')setH(s,rn,'Headshot URL',url);if(role==='reveal1')setH(s,rn,'Image 2 URL',url);if(role==='reveal2')setH(s,rn,'Image 3 URL',url);if(role==='id')setH(s,rn,'ID URL',url);if(role==='comp')setH(s,rn,'Comp Card URL',url);if(role==='photo'||role==='reveal1'||role==='reveal2'){const r=obj(s,rn),cur=r['Additional Image URLs']?String(r['Additional Image URLs'])+'\n':'';setH(s,rn,'Additional Image URLs',cur+url)}setH(s,rn,'Last Updated',new Date());diag('uploadImage:'+role,true,'Image uploaded',{submissionId:id,role:role,file:file?file.name:''},null);return out({ok:true,submissionId:id,role:role,url:url},e)}
+function finalizeSubmission(p,e){const s=sh(SHEET_SUBMISSIONS),rn=findRow(s,'Submission ID',p.submissionId);if(rn<2)throw new Error('Submission not found for finalize: '+p.submissionId);let r=obj(s,rn);if(!r['Image 2 URL']&&r['Headshot URL'])setH(s,rn,'Image 2 URL',r['Headshot URL']);if(!r['Image 3 URL']&&(r['Image 2 URL']||r['Headshot URL']))setH(s,rn,'Image 3 URL',r['Image 2 URL']||r['Headshot URL']);r=obj(s,rn);setH(s,rn,'Status',String(r['Duplicate Flag']).toLowerCase()==='true'?'Possible Duplicate - Pending Review':'Pending Review');setH(s,rn,'Last Updated',new Date());sendEmailsFromRow(obj(s,rn));diag('finalizeSubmission',true,'Submission finalized and email sent',{submissionId:p.submissionId,name:r.Name,email:r.Email},null);return out({ok:true,submissionId:p.submissionId},e)}
+function legacy(p,e){const id=p.submissionId||Utilities.getUuid();submitTextEntry(Object.assign({},p,{submissionId:id}),e);if(p.headshotFile)uploadImage({submissionId:id,role:'headshot',file:p.headshotFile},e);if(p.photoFiles&&p.photoFiles[0])uploadImage({submissionId:id,role:'reveal1',file:p.photoFiles[0]},e);if(p.photoFiles&&p.photoFiles[1])uploadImage({submissionId:id,role:'reveal2',file:p.photoFiles[1]},e);if(p.idFile)uploadImage({submissionId:id,role:'id',file:p.idFile},e);if(p.compCardFile)uploadImage({submissionId:id,role:'comp',file:p.compCardFile},e);return finalizeSubmission({submissionId:id},e)}
+function approveUrl(id,t){return ScriptApp.getService().getUrl()+'?action=approve&id='+encodeURIComponent(id)+'&token='+encodeURIComponent(t)}
+function rejectUrl(id,t){return ScriptApp.getService().getUrl()+'?action=reject&id='+encodeURIComponent(id)+'&token='+encodeURIComponent(t)}
+function esc(v){return String(v||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function fid(u){const s=String(u||''),a=s.match(/[?&]id=([^&]+)/);if(a)return a[1];const b=s.match(/\/d\/([^/]+)/);return b?b[1]:''}
+function view(u){const id=fid(u);return id?'https://drive.google.com/file/d/'+id+'/view':u}
+function details(r){const rows=[['Name',r.Name],['Age',r.Age],['Email',r.Email],['Phone',r.Phone],['IG Handle',r['IG Handle']],['City',r.City],['State',r.State],['Height',r.Height],['Measurements',r.Measurements],['Natural Hair Color',r['Natural Hair Color']],['Natural Eye Color',r['Natural Eye Color']],['Shoe Size',r['Shoe Size']],['Favorite Movie',r['Favorite Movie']],['Agency / Booking Contact',r['Agency or Booking Contact']],['Portfolio',r['Portfolio Link']],['Notes',r.Notes],['Duplicate Flag',r['Duplicate Flag']],['Duplicate Reason',r['Duplicate Reason']]];return'<table border="1" cellpadding="7" cellspacing="0">'+rows.filter(x=>x[1]!==''&&x[1]!==undefined).map(x=>'<tr><td><b>'+esc(x[0])+'</b></td><td>'+esc(x[1])+'</td></tr>').join('')+'</table>'}
+function imgs(r){const a=[['Headshot',r['Headshot URL']],['Reveal Image 1',r['Image 2 URL']],['Reveal Image 2',r['Image 3 URL']]].filter(x=>x[1]);let html='<h3>Card Images</h3>';if(a.length)html+='<div style="display:flex;gap:14px;flex-wrap:wrap">'+a.map(x=>'<div><p><b>'+esc(x[0])+'</b></p><a href="'+view(x[1])+'"><img src="'+x[1]+'" style="width:180px;max-height:240px;object-fit:cover;border:1px solid #d4af37"></a><p><a href="'+view(x[1])+'">Open full image</a></p></div>').join('')+'</div>';else html+='<p>No card images were saved.</p>';html+=(r['Additional Image URLs']?'<p><b>Public card image links:</b><br>'+esc(r['Additional Image URLs']).replace(/\n/g,'<br>')+'</p>':'');html+=(r['ID URL']?'<p><b>ID upload:</b> <a href="'+r['ID URL']+'">View</a></p>':'');html+=(r['Comp Card URL']?'<p><b>Comp card:</b> <a href="'+r['Comp Card URL']+'">View</a></p>':'');return html}
+function sendEmailsFromRow(r){const sid=String(r['Submission ID']||'').slice(0,8);if(r.Email)MailApp.sendEmail({to:r.Email,subject:'EPIC Bikini Contest submission received - '+(r.Name||'Model Entry')+(sid?' #'+sid:''),body:'Hi '+(r.Name||'there')+',\n\nWe received your EPIC Bikini Contest submission and our team will review your materials. Selected contestants will be contacted by email with next steps.\n\nThank you,\nEPIC Models & Talent',htmlBody:'<h2>EPIC Bikini Contest Submission Received</h2><p>Hi '+esc(r.Name||'there')+',</p><p>We received your EPIC Bikini Contest submission and our team will review your materials.</p><p>Selected contestants will be contacted by email with next steps.</p><p>Thank you,<br>EPIC Models &amp; Talent</p>'});const warn=String(r['Duplicate Flag']).toLowerCase()==='true'?'<p><b>Possible duplicate:</b> '+esc(r['Duplicate Reason']||'Similar contact details already exist.')+'</p>':'';MailApp.sendEmail({to:ADMIN_EMAIL,subject:'New EPIC Bikini Contest submission: '+(r.Name||'Model Entry'),htmlBody:'<h2>New EPIC Bikini Contest Submission</h2>'+warn+details(r)+imgs(r)+'<p><a href="'+r['Approval URL']+'">APPROVE & PUBLISH MODEL CARD</a> | <a href="'+r['Reject URL']+'">REJECT</a></p>'})}
+function approveSubmission(e){e=evt(e);const s=sh(SHEET_SUBMISSIONS),rn=findRow(s,'Submission ID',e.parameter.id);if(rn<2)return out({ok:false,error:'Submission not found'},e);const r=obj(s,rn);if(String(r['Approval Token'])!==String(e.parameter.token))return out({ok:false,error:'Invalid token'},e);const a=sh(SHEET_APPROVED);if(findRow(a,'Source Submission ID',r['Submission ID'])>1)return HtmlService.createHtmlOutput('<h2>Already Approved</h2><p>This entry has already been published.</p>');const num=String(Math.max(1,a.getLastRow())).padStart(2,'0');appendH(a,{'Model ID':Utilities.getUuid(),'Number':num,'Name':r.Name,'Age':r.Age,'IG Handle':r['IG Handle'],'City':r.City,'State':r.State,'Height':r.Height,'Measurements':r.Measurements,'Natural Hair Color':r['Natural Hair Color'],'Natural Eye Color':r['Natural Eye Color'],'Shoe Size':r['Shoe Size'],'Favorite Movie':r['Favorite Movie'],'Headshot URL':r['Headshot URL'],'Image 2 URL':r['Image 2 URL'],'Image 3 URL':r['Image 3 URL'],'Vote Count':0,'Status':'Approved','Approved At':new Date(),'Source Submission ID':r['Submission ID'],'Display Order':a.getLastRow(),'Slug':slug(r.Name),'Staff Notes':'','Homepage Visible':true,'Entry Page Visible':true,'Duplicate Flag':r['Duplicate Flag'],'Duplicate Reason':r['Duplicate Reason']});setH(s,rn,'Status','Approved');setH(s,rn,'Approved Model Number',num);setH(s,rn,'Approved At',new Date());return HtmlService.createHtmlOutput('<h2>Approved</h2><p>The model card is now live.</p>')}
+function rejectSubmission(e){e=evt(e);const s=sh(SHEET_SUBMISSIONS),rn=findRow(s,'Submission ID',e.parameter.id);if(rn<2)return out({ok:false,error:'Submission not found'},e);const r=obj(s,rn);if(String(r['Approval Token'])!==String(e.parameter.token))return out({ok:false,error:'Invalid token'},e);setH(s,rn,'Status','Rejected');return HtmlService.createHtmlOutput('<h2>Rejected</h2><p>This entry was marked rejected.</p>')}
+function approvedModels(e){const s=sh(SHEET_APPROVED),data=s.getDataRange().getValues(),h=data.shift().map(String),ix=n=>h.indexOf(n);const m=data.filter(r=>String(r[ix('Status')]).toLowerCase()==='approved'&&String(r[ix('Name')]||'').trim()).map(r=>{const o={};h.forEach((x,i)=>o[x]=r[i]);return{id:o['Model ID'],number:o.Number,name:o.Name,age:o.Age,instagram:o['IG Handle'],city:o.City,state:o.State,height:o.Height,measurements:o.Measurements,naturalHairColor:o['Natural Hair Color'],naturalEyeColor:o['Natural Eye Color'],shoeSize:o['Shoe Size'],favoriteMovie:o['Favorite Movie'],headshotUrl:o['Headshot URL'],image2Url:o['Image 2 URL'],image3Url:o['Image 3 URL'],voteCount:o['Vote Count']||0}});return out({ok:true,models:m},e)}
+function vote(e){e=evt(e);const modelId=e.parameter.modelId,voter=e.parameter.voter||e.parameter.voterKey||'',a=sh(SHEET_APPROVED),rn=findRow(a,'Model ID',modelId);if(rn<2)return out({ok:false,error:'Model not found'},e);const r=obj(a,rn),v=sh(SHEET_VOTES);let du=false;if(voter&&v.getLastRow()>1){const d=v.getDataRange().getValues(),h=d.shift().map(String),mi=h.indexOf('Model ID'),vi=h.indexOf('Voter Key');du=d.some(x=>String(x[mi])===String(modelId)&&String(x[vi])===String(voter))}appendH(v,{'Vote ID':Utilities.getUuid(),'Timestamp':new Date(),'Model ID':modelId,'Model Number':r.Number,'Model Name':r.Name,'Voter Key':voter,'Source Page':e.parameter.source||'','Duplicate Flag':du,'Created At':new Date()});if(du)return out({ok:true,duplicate:true,modelId:modelId,voteCount:r['Vote Count']||0},e);const c=Number(r['Vote Count']||0)+1;setH(a,rn,'Vote Count',c);return out({ok:true,modelId:modelId,voteCount:c},e)}
+function slug(v){return String(v||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}
+function testDeployedWebAppGetStatus(){const u='https://script.google.com/macros/s/AKfycbxVwGX70-fL-QM1nfKqlSyNdrh0hq_CFwBsKvwYgZ_AEbJL6oLufGXzLLqP6zGEtlCN/exec?action=status',r=UrlFetchApp.fetch(u,{method:'get',muteHttpExceptions:true,followRedirects:true});Logger.log('Status Code: '+r.getResponseCode());Logger.log('Response Text: '+r.getContentText().slice(0,1000))}
