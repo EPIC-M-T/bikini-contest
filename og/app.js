@@ -40,6 +40,10 @@ function splitPair(value) {
   return [parts[0] || '', parts.slice(1).join(' / ') || ''];
 }
 
+function submissionId() {
+  return 'web-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+}
+
 function readFileAsDataURL(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -49,7 +53,7 @@ function readFileAsDataURL(file) {
   });
 }
 
-async function imageToDataURL(file, maxSide = 1400, quality = .74) {
+async function imageToDataURL(file, maxSide = 1200, quality = .68) {
   if (!file || !file.type.startsWith('image/')) return readFileAsDataURL(file);
   const dataUrl = await readFileAsDataURL(file);
   return new Promise(resolve => {
@@ -72,8 +76,25 @@ async function packFile(file) {
   return { name: file.name, type: file.type || 'application/octet-stream', dataUrl: await imageToDataURL(file) };
 }
 
-async function packFiles(input) {
-  return Promise.all([...(input?.files || [])].slice(0, 10).map(packFile));
+function shuffled(files) {
+  const arr = [...(files || [])];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+async function postStage(data) {
+  const payload = new URLSearchParams();
+  Object.entries(data).forEach(([key, value]) => payload.append(key, typeof value === 'string' ? value : JSON.stringify(value)));
+  await fetch(SUBMISSION_URL, { method: 'POST', mode: 'no-cors', body: payload });
+}
+
+async function uploadStage(id, role, file) {
+  if (!file) return;
+  const packed = await packFile(file);
+  await postStage({ action: 'uploadImage', submissionId: id, role, file: packed });
 }
 
 photos?.addEventListener('change', () => {
@@ -88,51 +109,62 @@ form?.addEventListener('submit', async event => {
   }
 
   const submitButton = form.querySelector('[type="submit"]');
+  const id = submissionId();
   const locationParts = splitPair(document.querySelector('#location')?.value || '');
   const shoeDressParts = splitPair(document.querySelector('#shoeDress')?.value || '');
   const hairEyesParts = splitPair(document.querySelector('#hairEyes')?.value || '');
+  const revealImages = shuffled(document.querySelector('#photos')?.files).slice(0, 2);
 
   try {
     submitButton.disabled = true;
-    submitButton.textContent = 'Uploading...';
-    showToast('Uploading images and sending your submission...');
+    submitButton.textContent = 'Saving Info...';
+    showToast('Saving contestant info...');
 
-    const packedPhotos = await packFiles(document.querySelector('#photos'));
-    const headshotFile = await packFile(document.querySelector('#headshot')?.files?.[0]);
-    const idFile = await packFile(document.querySelector('#idUpload')?.files?.[0]);
-    const compCardFile = await packFile(document.querySelector('#compCardUpload')?.files?.[0]);
+    await postStage({
+      action: 'submitText',
+      submissionId: id,
+      name: document.querySelector('#name')?.value || '',
+      age: document.querySelector('#age')?.value || '',
+      email: document.querySelector('#email')?.value || '',
+      phone: document.querySelector('#phone')?.value || '',
+      instagram: document.querySelector('#instagram')?.value || '',
+      city: locationParts[0],
+      state: locationParts[1],
+      height: document.querySelector('#height')?.value || '',
+      measurements: document.querySelector('#measurements')?.value || '',
+      shoeSize: shoeDressParts[0],
+      dressSize: shoeDressParts[1],
+      naturalHairColor: hairEyesParts[0],
+      naturalEyeColor: hairEyesParts[1],
+      agency: document.querySelector('#agency')?.value || '',
+      portfolio: document.querySelector('#portfolio')?.value || '',
+      notes: document.querySelector('#notes')?.value || '',
+      sourcePage: location.href,
+      userAgent: navigator.userAgent
+    });
 
-    const payload = new FormData();
-    payload.append('action', 'submitEntry');
-    payload.append('name', document.querySelector('#name')?.value || '');
-    payload.append('age', document.querySelector('#age')?.value || '');
-    payload.append('email', document.querySelector('#email')?.value || '');
-    payload.append('phone', document.querySelector('#phone')?.value || '');
-    payload.append('instagram', document.querySelector('#instagram')?.value || '');
-    payload.append('city', locationParts[0]);
-    payload.append('state', locationParts[1]);
-    payload.append('height', document.querySelector('#height')?.value || '');
-    payload.append('measurements', document.querySelector('#measurements')?.value || '');
-    payload.append('shoeSize', shoeDressParts[0]);
-    payload.append('dressSize', shoeDressParts[1]);
-    payload.append('naturalHairColor', hairEyesParts[0]);
-    payload.append('naturalEyeColor', hairEyesParts[1]);
-    payload.append('agency', document.querySelector('#agency')?.value || '');
-    payload.append('portfolio', document.querySelector('#portfolio')?.value || '');
-    payload.append('notes', document.querySelector('#notes')?.value || '');
-    payload.append('sourcePage', location.href);
-    payload.append('userAgent', navigator.userAgent);
-    payload.append('idFile', JSON.stringify(idFile));
-    payload.append('headshotFile', JSON.stringify(headshotFile));
-    payload.append('photoFiles', JSON.stringify(packedPhotos));
-    payload.append('compCardFile', JSON.stringify(compCardFile));
+    submitButton.textContent = 'Uploading Headshot...';
+    showToast('Uploading selected headshot...');
+    await uploadStage(id, 'headshot', document.querySelector('#headshot')?.files?.[0]);
 
-    submitButton.textContent = 'Submitting...';
-    await fetch(SUBMISSION_URL, { method: 'POST', mode: 'no-cors', body: payload });
+    submitButton.textContent = 'Uploading Reveal Images...';
+    showToast('Uploading two random reveal images...');
+    await uploadStage(id, 'reveal1', revealImages[0]);
+    await uploadStage(id, 'reveal2', revealImages[1]);
+
+    submitButton.textContent = 'Uploading Verification...';
+    await uploadStage(id, 'id', document.querySelector('#idUpload')?.files?.[0]);
+    await uploadStage(id, 'comp', document.querySelector('#compCardUpload')?.files?.[0]);
+
+    submitButton.textContent = 'Finalizing...';
+    showToast('Finalizing and sending your submission...');
+    await postStage({ action: 'finalizeSubmission', submissionId: id });
+
     form.reset();
     if (selected) selected.textContent = '0 images selected.';
     showToast('Thank you! Your EPIC Bikini Contest submission has been sent for contestant review.');
   } catch (error) {
+    console.error(error);
     showToast('Submission could not be sent. Please try again or email book@epicmodelsandtalent.com.');
   } finally {
     submitButton.disabled = false;
