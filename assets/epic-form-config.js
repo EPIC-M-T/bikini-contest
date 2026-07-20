@@ -1,0 +1,1 @@
+window.EPIC_APPS_SCRIPT_URL = window.EPIC_APPS_SCRIPT_URL || "";
