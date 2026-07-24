@@ -73,6 +73,10 @@ function addJudgingAndRegistrationInfo(){
   if(applyLede){
     applyLede.textContent='Models interested in participating can apply online for the opportunity to be featured and promoted prior to the event. In-person registration will also be available on the day of the event; however, spots are limited, so early registration is encouraged to secure a spot in the competition.';
   }
+  const photosCheck=document.querySelector('#models .checklist .check:nth-child(2)');
+  if(photosCheck){
+    photosCheck.innerHTML='<b>02 · 3–5 Images</b>Show your face, physique, style, and range.';
+  }
   const postingCheck=document.querySelector('#models .checklist .check:nth-child(4)');
   if(postingCheck){
     postingCheck.innerHTML='<b>04 · Selection + Posting</b>Selected girls will be notified by email and may be posted on the main page and social channels before the live, judge-selected competition.';
