@@ -1,1 +1,1 @@
-window.EPIC_APPS_SCRIPT_URL = window.EPIC_APPS_SCRIPT_URL || "";
+window.EPIC_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxVwGX70-fL-QM1nfKqlSyNdrh0hq_CFwBsKvwYgZ_AEbJL6oLufGXzLLqP6zGEtlCN/exec";
