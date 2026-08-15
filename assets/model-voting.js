@@ -1,7 +1,7 @@
 const EPIC_MODEL_LIMIT = 100;
 const EPIC_MODEL_STORAGE = 'epic-bikini-contest-votes-v1';
 const EPIC_VOTED_STORAGE = 'epic-bikini-contest-voted-models-v1';
-const EPIC_HIDDEN_MODEL_IDS = new Set(['a6a3cb67-c935-4e54-b4bb-8f2b5efe898a', 'c959f967-a248-42fa-beff-f8c3cd6520d6', 'c06aff01-d06a-4908-8db2-55e5e75efbd8']);
+const EPIC_HIDDEN_MODEL_IDS = new Set(['a6a3cb67-c935-4e54-b4bb-8f2b5efe898a', 'c959f967-a248-42fa-beff-f8c3cd6520d6', 'c06aff01-d06a-4908-8db2-55e5e75efbd8', 'e2471247-2b60-4961-9a98-ef3945885f2d']);
 const EPIC_MODEL_VOTE_MERGES = Object.freeze({
   '9bdc18ab-4988-4785-8645-724288997a1e': ['c959f967-a248-42fa-beff-f8c3cd6520d6']
 });
